@@ -14,6 +14,8 @@ export const metadata: Metadata = {
   description: 'Manage your store with AI-powered insights.',
 };
 
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({
   children,
 }: Readonly<{

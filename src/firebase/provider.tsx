@@ -72,16 +72,23 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
 
   const pathname = usePathname();
   const router = useRouter();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Effect to subscribe to Firebase auth state changes
   useEffect(() => {
-    if (!auth || !firestore) {
-      setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Auth or Firestore service not provided.") });
+    if (!isMounted || !auth || !firestore) {
+      if (!auth || !firestore) {
+        setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Auth or Firestore service not provided.") });
+      }
       return;
     }
-  
+
     setUserAuthState({ user: null, isUserLoading: true, userError: null });
-  
+
     const unsubscribe = onAuthStateChanged(
       auth,
       async (firebaseUser) => {
@@ -98,10 +105,10 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
                 setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
 
                 // Original stricter logic:
-                // auth.signOut(); 
+                // auth.signOut();
                 // setUserAuthState({ user: null, isUserLoading: false, userError: null });
                 // if (pathname !== '/login') router.replace('/login');
-                
+
             } else {
                  setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
             }
@@ -126,9 +133,9 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
         }
       }
     );
-  
+
     return () => unsubscribe();
-  }, [auth, firestore, pathname, router]);
+  }, [auth, firestore, pathname, router, isMounted]);
 
   // Memoize the context value
   const contextValue = useMemo((): FirebaseContextState => {
