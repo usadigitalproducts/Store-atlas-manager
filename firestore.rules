@@ -1,0 +1,124 @@
+/**
+ * @fileoverview Firestore Security Rules
+ * @author aifirebase.com
+ *
+ * @description
+ * This ruleset enforces a strict user-ownership model for a financial tracking
+ * application. It ensures that users can only access their own profile, order,
+ * and capital data, providing strong data privacy and security.
+ *
+ * Core Philosophy:
+ * The security model is built on the principle of "path-based ownership." All user-
+ * specific data is stored in subcollections under a unique user document path.
+ * This approach guarantees that a user can never access another user's data.
+ *
+ * Data Structure:
+ * - /users/{userId}: Stores the user's own profile information.
+ * - /users/{userId}/orders/{orderId}: Contains all orders for a specific user.
+ * - /users/{userId}/capital/{capitalId}: Contains all capital transactions for a user.
+ *
+ * Key Security Decisions:
+ * - Strict Ownership: All read and write operations are gated by a check that
+ *   verifies the authenticated user's ID matches the {userId} in the path.
+ * - No User Listing: The rules implicitly disallow listing the top-level
+ *   /users collection, protecting user privacy.
+ * - Default Deny: Any path or operation not explicitly allowed is denied by default.
+ * - Immutable Fields: Critical relational fields (like 'createdBy') and
+ *   system-managed fields (like 'payoutStatus') are made immutable after creation
+ *   to ensure data integrity and prevent unauthorized client-side changes.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Helper Functions
+    // -------------------------------------------------------------------------
+
+    /**
+     * Checks if a user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Checks if the currently authenticated user's UID matches the provided userId.
+     * This is the core function for enforcing user ownership.
+     * @param userId The user ID to check against the authenticated user's UID.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Checks if the user is the owner and the document already exists.
+     * Crucial for preventing modification of non-existent documents.
+     * @param userId The user ID to check for ownership.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * Validates an incoming Capital document on creation.
+     * Ensures the createdBy field is correctly set to the authenticated user.
+     * @param userId The user ID from the path, used for ownership check.
+     */
+    function isValidCapitalCreate(userId) {
+      let isCreator = request.resource.data.createdBy == request.auth.uid;
+      return isOwner(userId) && isCreator;
+    }
+
+    /**
+     * Enforces immutability for critical fields on Capital document updates.
+     * Prevents changing the original creator of the record.
+     */
+    function isImmutableCapitalFieldOnUpdate() {
+      return request.resource.data.createdBy == resource.data.createdBy;
+    }
+
+    /**
+     * Enforces immutability for critical fields on Order document updates.
+     * Prevents client-side changes to the system-managed payoutStatus field.
+     */
+    function isImmutableOrderFieldOnUpdate() {
+      return request.resource.data.payoutStatus == resource.data.payoutStatus;
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    match /users/{userId} {
+      /**
+       * @description Secures the user's own profile document.
+       * @allow (get, create, update) A user can manage their own profile.
+       * @deny (delete) Users cannot delete their own profile document.
+       */
+      allow get, create, update: if isOwner(userId);
+      allow delete: if false;
+
+      /**
+       * @description Secures the 'orders' subcollection.
+       */
+      match /orders/{orderId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId);
+        allow update: if isExistingOwner(userId) && isImmutableOrderFieldOnUpdate();
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Secures the 'capital' subcollection.
+       */
+      match /capital/{capitalId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isValidCapitalCreate(userId);
+        allow update: if isExistingOwner(userId) && isImmutableCapitalFieldOnUpdate();
+        allow delete: if isExistingOwner(userId);
+      }
+    }
+  }
+}
