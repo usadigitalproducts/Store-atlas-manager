@@ -1,10 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster";
 import { Inter as FontSans } from "next/font/google"
 import { cn } from "@/lib/utils"
-import { FirebaseClientProvider } from '@/firebase';
-import { AdminProvider } from '@/components/providers/admin-provider';
+import { RootProviders } from '@/components/providers/root-providers';
 
 const fontSans = FontSans({
   subsets: ["latin"],
@@ -29,12 +27,9 @@ export default function RootLayout({
           fontSans.variable
         )}
       >
-        <FirebaseClientProvider>
-          <AdminProvider>
-            {children}
-          </AdminProvider>
-        </FirebaseClientProvider>
-        <Toaster />
+        <RootProviders>
+          {children}
+        </RootProviders>
       </body>
     </html>
   );
